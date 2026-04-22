@@ -1,0 +1,28 @@
+{
+  "name": "agentmesh",
+  "private": true,
+  "workspaces": [
+    "packages/core",
+    "packages/agent-base",
+    "packages/agents/research",
+    "packages/agents/sales-crm",
+    "packages/agents/code-review",
+    "packages/voice",
+    "packages/gateway",
+    "packages/dashboard"
+  ],
+  "scripts": {
+    "build": "npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-research && npm run build -w @agentmesh/agent-sales-crm && npm run build -w @agentmesh/agent-code-review && npm run build -w @agentmesh/voice && npm run build -w @agentmesh/gateway && npm run build -w @agentmesh/dashboard",
+    "dev": "concurrently -n core,research,sales,review,voice,dash -c blue,green,yellow,magenta,cyan,white \"npm run dev -w @agentmesh/core\" \"npm run dev -w @agentmesh/agent-research\" \"npm run dev -w @agentmesh/agent-sales-crm\" \"npm run dev -w @agentmesh/agent-code-review\" \"npm run dev -w @agentmesh/voice\" \"npm run dev -w @agentmesh/dashboard\"",
+    "demo": "npx tsx demo/run-demo.ts",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "chalk": "^5.3.0",
+    "concurrently": "^8.2.2",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}

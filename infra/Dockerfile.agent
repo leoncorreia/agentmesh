@@ -1,0 +1,18 @@
+FROM cgr.dev/chainguard/node:latest AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY tsconfig.base.json ./
+COPY packages ./packages
+RUN npm ci
+RUN npm run build
+
+FROM cgr.dev/chainguard/node:latest
+WORKDIR /app
+ARG AGENT
+ENV NODE_ENV=production
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/package.json ./package.json
+EXPOSE 3001
+ENV AGENT_NAME=${AGENT}
+CMD ["sh", "-c", "node packages/agents/${AGENT_NAME}/dist/index.js"]

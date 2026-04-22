@@ -1,0 +1,88 @@
+version: '3.9'
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+    command: redis-server --save "" --appendonly no
+
+  core:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.core
+    ports: ['3000:3000']
+    env_file: .env
+    depends_on: [redis]
+    environment:
+      REDIS_URL: redis://redis:6379
+
+  agent-research:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.agent
+      args: { AGENT: research }
+    env_file: .env
+    environment:
+      AGENT_PORT: 3001
+      CORE_URL: http://core:3000
+      AGENT_PUBLIC_HOST: agent-research
+      AGENT_ENDPOINT: http://agent-research:3001
+      REDIS_URL: redis://redis:6379
+    depends_on: [core, redis]
+
+  agent-sales-crm:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.agent
+      args: { AGENT: sales-crm }
+    env_file: .env
+    environment:
+      AGENT_PORT: 3002
+      CORE_URL: http://core:3000
+      AGENT_PUBLIC_HOST: agent-sales-crm
+      AGENT_ENDPOINT: http://agent-sales-crm:3002
+      REDIS_URL: redis://redis:6379
+    depends_on: [core, redis]
+
+  agent-code-review:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.agent
+      args: { AGENT: code-review }
+    env_file: .env
+    environment:
+      AGENT_PORT: 3003
+      CORE_URL: http://core:3000
+      AGENT_PUBLIC_HOST: agent-code-review
+      AGENT_ENDPOINT: http://agent-code-review:3003
+      REDIS_URL: redis://redis:6379
+    depends_on: [core, redis]
+
+  voice:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.voice
+    ports: ['3004:3004']
+    env_file: .env
+    depends_on: [core, redis]
+    environment:
+      CORE_URL: http://core:3000
+      VOICE_PORT: 3004
+      REDIS_URL: redis://redis:6379
+
+  gateway:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.gateway
+    ports: ['9991:9991']
+    env_file: .env
+    depends_on: [core]
+    environment:
+      CORE_URL: http://core:3000
+      GATEWAY_PORT: 9991
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.dashboard
+    ports: ['5173:5173']
+    depends_on: [gateway]

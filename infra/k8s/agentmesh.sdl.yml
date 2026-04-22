@@ -1,0 +1,40 @@
+---
+version: "2.0"
+
+services:
+  core:
+    image: agentmesh/core:latest
+    expose:
+      - port: 3000
+        as: 3000
+        to:
+          - global: true
+    env:
+      - REDIS_URL=redis://redis:6379
+    params:
+      compute:
+        gpu:
+          units: 1
+  redis:
+    image: redis:7-alpine
+    expose:
+      - port: 6379
+        as: 6379
+        to:
+          - service: core
+
+profiles:
+  compute:
+    core:
+      resources:
+        cpu:
+          units: 1
+        memory:
+          size: 2Gi
+        gpu:
+          units: 1
+
+deployment:
+  core:
+    akash:
+      provider: PLACEHOLDER_AKASH_PROVIDER

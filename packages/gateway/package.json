@@ -1,0 +1,22 @@
+{
+  "name": "@agentmesh/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "graphql": "^16.8.1",
+    "graphql-scalars": "^1.22.4",
+    "graphql-yoga": "^5.1.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
