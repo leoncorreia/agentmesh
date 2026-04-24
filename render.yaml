@@ -69,6 +69,8 @@ services:
         value: "true"
       - key: AUTONOMY_INTERVAL_SECONDS
         value: "180"
+      - key: AUTONOMY_TASK_TIMEOUT_MS
+        value: "300000"
       - key: AUTONOMY_SOURCES
         sync: false
       - key: AUTONOMY_BRIEFING_PHONE

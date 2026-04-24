@@ -28,6 +28,12 @@ type AutonomyDeps = {
   publishEvent: (topic: string, event: MeshEvent) => Promise<void>;
 };
 
+/** Remote research (Tinyfish + LLM) often exceeds 120s; core fetch uses this as AbortSignal deadline. */
+function autonomyRemoteTaskTimeoutMs(): number {
+  const n = Number(process.env.AUTONOMY_TASK_TIMEOUT_MS ?? 240_000);
+  return Number.isFinite(n) && n >= 30_000 ? n : 240_000;
+}
+
 function parseSources(): string[] {
   const configured = process.env.AUTONOMY_SOURCES;
   if (!configured || configured.startsWith('PLACEHOLDER')) {
@@ -209,7 +215,7 @@ export class AutonomyController {
           citations: gathered.map((x) => x.url),
         },
         priority: 'high',
-        timeoutMs: 120000,
+        timeoutMs: autonomyRemoteTaskTimeoutMs(),
       };
       const researchResult = await this.deps.dispatchTask(researchTask);
       const summary = String(researchResult.output.summary ?? '');
@@ -223,7 +229,7 @@ export class AutonomyController {
           citations: gathered.map((x) => x.url),
         },
         priority: 'high',
-        timeoutMs: 120000,
+        timeoutMs: autonomyRemoteTaskTimeoutMs(),
       };
       const crmResult = await this.deps.dispatchTask(crmTask);
 

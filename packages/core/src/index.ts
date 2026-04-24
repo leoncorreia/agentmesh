@@ -94,16 +94,48 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
     );
     const agent = online[0]!;
     activeTasks.push(req);
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), req.timeoutMs);
     try {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), req.timeoutMs);
-      const res = await fetch(`${agent.endpoint.replace(/\/$/, '')}/tasks`, {
+      const url = `${agent.endpoint.replace(/\/$/, '')}/tasks`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
         signal: ac.signal,
       });
-      clearTimeout(t);
+      if (!res.ok) {
+        const errText = (await res.text()).slice(0, 500);
+        const httpFail: MeshEvent = {
+          id: uuidv4(),
+          topic: 'task.remote.failed',
+          sourceAgentId: agent.id,
+          payload: {
+            taskId: req.id,
+            targetCapability: req.targetCapability,
+            reason: 'http_error',
+            httpStatus: res.status,
+            endpoint: url,
+            bodyPreview: errText,
+          },
+          timestamp: new Date(),
+        };
+        pushEvent(httpFail);
+        broadcast({ type: 'event', data: httpFail });
+        try {
+          await withTimeout(publish(httpFail.topic, httpFail), undefined, 1200);
+        } catch {
+          /* best-effort bus */
+        }
+        return {
+          taskId: req.id,
+          agentId: agent.id,
+          output: {},
+          durationMs: Date.now() - started,
+          status: 'error',
+          error: `HTTP ${res.status}: ${errText}`,
+        };
+      }
       const raw = (await res.json()) as TaskResult;
       const output = await transformPayload(
         raw.output,
@@ -133,6 +165,7 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
       }
       return result;
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       const failed: MeshEvent = {
         id: uuidv4(),
         topic: 'task.remote.failed',
@@ -140,7 +173,10 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
         payload: {
           taskId: req.id,
           targetCapability: req.targetCapability,
-          error: e instanceof Error ? e.message : 'dispatch failed',
+          reason: msg.includes('abort') ? 'timeout_or_abort' : 'network_or_parse',
+          error: msg,
+          endpoint: `${agent.endpoint.replace(/\/$/, '')}/tasks`,
+          timeoutMs: req.timeoutMs,
         },
         timestamp: new Date(),
       };
@@ -157,10 +193,11 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
         output: {},
         durationMs: Date.now() - started,
         status: 'timeout',
-        error: e instanceof Error ? e.message : 'dispatch failed',
+        error: msg,
       };
     } finally {
-      const idx = activeTasks.findIndex((t) => t.id === req.id);
+      clearTimeout(t);
+      const idx = activeTasks.findIndex((task) => task.id === req.id);
       if (idx >= 0) activeTasks.splice(idx, 1);
     }
   }
