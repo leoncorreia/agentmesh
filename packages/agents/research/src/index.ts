@@ -64,7 +64,7 @@ async function invokeGmi(system: string, user: string): Promise<string | null> {
           { role: 'user', content: user.slice(0, 80_000) },
         ],
         temperature: 0.2,
-        max_tokens: 700,
+        max_completion_tokens: 700,
       }),
     });
     if (!res.ok) {
