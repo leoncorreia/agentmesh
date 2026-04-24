@@ -16,6 +16,13 @@ export interface AutonomyStatus {
   lastError?: string;
 }
 
+export interface AutonomyConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  briefingPhone?: string;
+  sources: string[];
+}
+
 type AutonomyDeps = {
   dispatchTask: (request: TaskRequest) => Promise<TaskResult>;
   publishEvent: (topic: string, event: MeshEvent) => Promise<void>;
@@ -51,9 +58,10 @@ async function fetchSourceSnippet(url: string): Promise<string> {
 }
 
 export class AutonomyController {
-  private readonly enabled: boolean;
-  private readonly intervalSeconds: number;
-  private readonly sources: string[];
+  private enabled: boolean;
+  private intervalSeconds: number;
+  private sources: string[];
+  private briefingPhone?: string;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private runs = 0;
@@ -66,14 +74,20 @@ export class AutonomyController {
     this.enabled = process.env.AUTONOMY_ENABLED !== 'false';
     this.intervalSeconds = Number(process.env.AUTONOMY_INTERVAL_SECONDS ?? 180);
     this.sources = parseSources();
+    this.briefingPhone = process.env.AUTONOMY_BRIEFING_PHONE;
   }
 
   start(): void {
     if (!this.enabled || this.timer) return;
+    this.startTimer();
+    void this.runCycle('startup');
+  }
+
+  private startTimer(): void {
+    if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => {
       void this.runCycle('interval');
     }, this.intervalSeconds * 1000);
-    void this.runCycle('startup');
   }
 
   stop(): void {
@@ -94,9 +108,57 @@ export class AutonomyController {
     };
   }
 
+  getConfig(): AutonomyConfig {
+    return {
+      enabled: this.enabled,
+      intervalSeconds: this.intervalSeconds,
+      briefingPhone: this.briefingPhone,
+      sources: [...this.sources],
+    };
+  }
+
+  updateConfig(
+    patch: Partial<AutonomyConfig>,
+  ): { config: AutonomyConfig; status: AutonomyStatus } {
+    if (typeof patch.enabled === 'boolean') {
+      this.enabled = patch.enabled;
+      if (!this.enabled) this.stop();
+      else this.start();
+    }
+    if (
+      typeof patch.intervalSeconds === 'number' &&
+      Number.isFinite(patch.intervalSeconds)
+    ) {
+      this.intervalSeconds = Math.max(15, Math.floor(patch.intervalSeconds));
+      if (this.enabled) this.startTimer();
+    }
+    if (typeof patch.briefingPhone === 'string') {
+      this.briefingPhone = patch.briefingPhone.trim();
+    }
+    if (Array.isArray(patch.sources) && patch.sources.length > 0) {
+      this.sources = patch.sources.map((x) => String(x).trim()).filter(Boolean);
+    }
+    return { config: this.getConfig(), status: this.getStatus() };
+  }
+
   async runNow(): Promise<AutonomyStatus> {
     await this.runCycle('manual');
     return this.getStatus();
+  }
+
+  private formatVoiceBriefing(summary: string, actions: string[]): string {
+    const clean = summary
+      .replace(/\s+/g, ' ')
+      .replace(/\[demo\][^.;!?]*/gi, '')
+      .replace(/data:\s*\{[^}]+\}/gi, '')
+      .replace(/timestamp[:=]\S+/gi, '')
+      .trim();
+    const short = clean.length > 280 ? `${clean.slice(0, 277)}...` : clean;
+    const actionHint = actions.find((a) => /risk|competitor|monetization/i.test(a));
+    if (short) {
+      return `AgentMesh briefing. ${short}${actionHint ? ` Key action: ${actionHint}.` : ''}`;
+    }
+    return 'AgentMesh briefing. No critical new updates this cycle.';
   }
 
   private async runCycle(trigger: 'startup' | 'interval' | 'manual'): Promise<void> {
@@ -194,15 +256,16 @@ export class AutonomyController {
         (process.env.VOICE_HOSTPORT
           ? `http://${process.env.VOICE_HOSTPORT}`
           : undefined);
-      const phone = process.env.AUTONOMY_BRIEFING_PHONE;
+      const phone = this.briefingPhone ?? process.env.AUTONOMY_BRIEFING_PHONE;
       if (voiceUrl && phone && !voiceUrl.startsWith('PLACEHOLDER')) {
         try {
+          const briefing = this.formatVoiceBriefing(summary, actions);
           await fetch(`${voiceUrl.replace(/\/$/, '')}/vapi/trigger-call`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               phoneNumber: phone,
-              message: `Autonomous AgentMesh briefing: ${summary.slice(0, 250)}`,
+              message: briefing,
             }),
           });
           actions.push('Triggered voice briefing call');

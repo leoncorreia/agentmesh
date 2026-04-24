@@ -169,6 +169,19 @@ export async function buildServer() {
   app.get('/autonomy/status', async () => {
     return autonomyController?.getStatus() ?? { enabled: false };
   });
+  app.get('/autonomy/config', async () => {
+    return autonomyController?.getConfig() ?? { enabled: false };
+  });
+  app.post('/autonomy/config', async (request) => {
+    if (!autonomyController) return { enabled: false };
+    const patch = request.body as {
+      enabled?: boolean;
+      intervalSeconds?: number;
+      briefingPhone?: string;
+      sources?: string[];
+    };
+    return autonomyController.updateConfig(patch);
+  });
   app.get('/sponsors/status', async () => {
     return getSponsorStatus();
   });
