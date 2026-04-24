@@ -64,16 +64,16 @@ export async function createAgentServer(opts: AgentServerOptions): Promise<void>
     });
   }
 
-  // Hooks must be registered before listen() (Fastify requirement).
-  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-  app.addHook('onClose', async () => {
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-  });
-
   await app.listen({ port: opts.port, host: '0.0.0.0' });
 
   await registerWithRetry();
-  heartbeatInterval = setInterval(() => {
+  const heartbeatInterval = setInterval(() => {
     void beat();
   }, 15_000);
+  // Avoid Fastify onClose (hook order + deploy caches); clear on process shutdown instead.
+  const clearBeat = () => {
+    clearInterval(heartbeatInterval);
+  };
+  process.once('SIGTERM', clearBeat);
+  process.once('SIGINT', clearBeat);
 }
