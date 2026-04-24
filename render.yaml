@@ -121,7 +121,6 @@ services:
     runtime: node
     plan: starter
     autoDeploy: true
-    healthCheckPath: /health
     buildCommand: npm ci && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-research
     startCommand: node packages/agents/research/dist/index.js
     envVars:
@@ -154,7 +153,6 @@ services:
     runtime: node
     plan: starter
     autoDeploy: true
-    healthCheckPath: /health
     buildCommand: npm ci && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-sales-crm
     startCommand: node packages/agents/sales-crm/dist/index.js
     envVars:
@@ -183,7 +181,6 @@ services:
     runtime: node
     plan: starter
     autoDeploy: true
-    healthCheckPath: /health
     buildCommand: npm ci && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-code-review
     startCommand: node packages/agents/code-review/dist/index.js
     envVars:
