@@ -35,6 +35,25 @@ const sockets = new Set<WebSocket>();
 
 let meshHooksInstalled = false;
 let autonomyController: AutonomyController | null = null;
+const REDIS_OP_TIMEOUT_MS = Number(process.env.REDIS_OP_TIMEOUT_MS ?? 1500);
+
+async function withTimeout<T>(
+  op: Promise<T>,
+  fallback: T,
+  timeoutMs = REDIS_OP_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      op,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function pushEvent(ev: MeshEvent): void {
   recentEvents.unshift(ev);
@@ -49,7 +68,7 @@ function broadcast(obj: unknown): void {
 }
 
 async function buildMeshState(): Promise<MeshState> {
-  const agents = await getAllAgents();
+  const agents = await withTimeout(getAllAgents(), []);
   const merged = [...agents];
   for (const local of localAgentRegistry) {
     if (!merged.some((a) => a.id === local.id)) merged.push(local);
@@ -63,18 +82,25 @@ async function buildMeshState(): Promise<MeshState> {
 
 async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
   const started = Date.now();
-  const candidates = await findByCapability(req.targetCapability);
+  const local = await runLocalTask(req, async (topic, event) => {
+    try {
+      await withTimeout(publish(topic, event), undefined, 1200);
+    } catch {
+      /* best-effort publish */
+    }
+  });
+  if (local) {
+    const output = await transformPayload(
+      local.output,
+      local.agentId,
+      req.originAgentId === 'user' ? 'user' : String(req.originAgentId),
+    );
+    return { ...local, output, durationMs: Date.now() - started };
+  }
+
+  const candidates = await withTimeout(findByCapability(req.targetCapability), []);
   const online = candidates.filter((a) => a.status === 'online');
   if (online.length === 0) {
-    const local = await runLocalTask(req, publish);
-    if (local) {
-      const output = await transformPayload(
-        local.output,
-        local.agentId,
-        req.originAgentId === 'user' ? 'user' : String(req.originAgentId),
-      );
-      return { ...local, output, durationMs: Date.now() - started };
-    }
     return {
       taskId: req.id,
       agentId: '',
@@ -168,7 +194,7 @@ export async function buildServer() {
   });
 
   app.get('/agents', async () => {
-    const remote = await getAllAgents();
+    const remote = await withTimeout(getAllAgents(), []);
     const merged = [...remote];
     for (const local of localAgentRegistry) {
       if (!merged.some((a) => a.id === local.id)) merged.push(local);
