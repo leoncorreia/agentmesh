@@ -60,6 +60,8 @@ export async function createAgentServer(opts: AgentServerOptions): Promise<void>
     });
   }
 
+  await app.listen({ port: opts.port, host: '0.0.0.0' });
+
   await registerWithRetry();
   const interval = setInterval(() => {
     void beat();
@@ -68,6 +70,4 @@ export async function createAgentServer(opts: AgentServerOptions): Promise<void>
   app.addHook('onClose', async () => {
     clearInterval(interval);
   });
-
-  await app.listen({ port: opts.port, host: '0.0.0.0' });
 }
