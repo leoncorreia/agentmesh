@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { coreUrl } from '../lib/meshClient';
 
 export function AgentDetailPage() {
   const { id } = useParams();
   const [agent, setAgent] = useState<Record<string, unknown> | null>(null);
   useEffect(() => {
-    void fetch(`/core/agents/${id}`)
+    void fetch(coreUrl(`/agents/${id}`))
       .then((r) => r.json())
       .then(setAgent)
       .catch(() => setAgent(null));

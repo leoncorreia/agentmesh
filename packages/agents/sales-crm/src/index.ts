@@ -6,8 +6,13 @@ import {
 import { createAgentServer } from '@agentmesh/agent-base';
 import type { MeshEvent, TaskRequest, TaskResult } from '@agentmesh/core/types';
 
-const CORE = (process.env.CORE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const PORT = Number(process.env.AGENT_PORT ?? 3002);
+const CORE = (
+  process.env.CORE_URL ??
+  (process.env.CORE_HOSTPORT
+    ? `http://${process.env.CORE_HOSTPORT}`
+    : 'http://localhost:3000')
+).replace(/\/$/, '');
+const PORT = Number(process.env.PORT ?? process.env.AGENT_PORT ?? 3002);
 const AGENT_ID = process.env.AGENT_ID ?? uuidv4();
 const PUBLIC_HOST = process.env.AGENT_PUBLIC_HOST ?? 'localhost';
 const ENDPOINT =

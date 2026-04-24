@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -23,6 +24,7 @@ import {
 } from './registry.js';
 import { startRouter } from './router.js';
 import { transformPayload } from './transformer.js';
+import { AutonomyController } from './autonomy.js';
 
 const recentEvents: MeshEvent[] = [];
 const MAX_EVENTS = 50;
@@ -31,6 +33,7 @@ const activeTasks: TaskRequest[] = [];
 const sockets = new Set<WebSocket>();
 
 let meshHooksInstalled = false;
+let autonomyController: AutonomyController | null = null;
 
 function pushEvent(ev: MeshEvent): void {
   recentEvents.unshift(ev);
@@ -106,6 +109,7 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
+  await app.register(cors, { origin: true });
 
   await app.register(swagger, {
     openapi: {
@@ -116,6 +120,13 @@ export async function buildServer() {
   await app.register(websocket);
 
   app.get('/health', async () => ({ ok: true }));
+  app.get('/autonomy/status', async () => {
+    return autonomyController?.getStatus() ?? { enabled: false };
+  });
+  app.post('/autonomy/run-now', async () => {
+    if (!autonomyController) return { enabled: false };
+    return autonomyController.runNow();
+  });
 
   app.post('/agents/register', async (request) => {
     const body = request.body as Omit<
@@ -204,6 +215,11 @@ export async function start(): Promise<void> {
         broadcast({ type: 'agent_status', data: state.agents }),
       );
     });
+    autonomyController = new AutonomyController({
+      dispatchTask,
+      publishEvent: publish,
+    });
+    autonomyController.start();
   }
 
   const app = await buildServer();

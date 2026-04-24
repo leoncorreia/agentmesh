@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/node:latest AS builder
+FROM --platform=linux/amd64 cgr.dev/chainguard/node:latest AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY tsconfig.base.json tsconfig.demo.json ./
@@ -7,7 +7,7 @@ COPY demo ./demo
 RUN npm ci
 RUN npm run build
 
-FROM cgr.dev/chainguard/node:latest
+FROM --platform=linux/amd64 cgr.dev/chainguard/node:latest
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM --platform=linux/amd64 cgr.dev/chainguard/node:latest AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY tsconfig.base.json ./
@@ -6,8 +6,9 @@ COPY packages ./packages
 RUN npm ci
 RUN npm run build -w @agentmesh/dashboard
 
-FROM nginx:1.25-alpine
-COPY --from=builder /app/packages/dashboard/dist /usr/share/nginx/html
-COPY packages/dashboard/nginx.conf /etc/nginx/conf.d/default.conf
+FROM --platform=linux/amd64 cgr.dev/chainguard/node:latest
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/packages/dashboard/dist ./dist
 EXPOSE 5173
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "-e", "const http=require('http');const fs=require('fs');const path=require('path');const base=path.join(process.cwd(),'dist');const port=Number(process.env.PORT||5173);const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.json':'application/json','.ico':'image/x-icon'};http.createServer((req,res)=>{let p=req.url.split('?')[0];if(p==='/'||!path.extname(p))p='/index.html';const f=path.join(base,p);fs.readFile(f,(e,d)=>{if(e){fs.readFile(path.join(base,'index.html'),(e2,d2)=>{if(e2){res.statusCode=404;res.end('Not found');return;}res.setHeader('Content-Type','text/html');res.end(d2);});return;}res.setHeader('Content-Type',mime[path.extname(f)]||'application/octet-stream');res.end(d);});}).listen(port,'0.0.0.0');"]

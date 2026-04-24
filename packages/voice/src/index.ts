@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { Redis } from 'ioredis';
 
-const CORE = (process.env.CORE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const PORT = Number(process.env.VOICE_PORT ?? 3004);
+const CORE = (
+  process.env.CORE_URL ??
+  (process.env.CORE_HOSTPORT
+    ? `http://${process.env.CORE_HOSTPORT}`
+    : 'http://localhost:3000')
+).replace(/\/$/, '');
+const PORT = Number(process.env.PORT ?? process.env.VOICE_PORT ?? 3004);
 const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'anthropic.claude-3-5-sonnet-20241022-v2:0';
 
 let redis: Redis | null = null;
@@ -48,6 +54,7 @@ async function dispatch(capability: string, query: string) {
 }
 
 const app = Fastify({ logger: true });
+await app.register(cors, { origin: true });
 
 app.post('/vapi/webhook', async (request, reply) => {
   const body = request.body as {

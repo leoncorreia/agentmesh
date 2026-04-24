@@ -8,8 +8,13 @@ import { GraphQLJSON } from 'graphql-scalars';
 import { createSchema, createYoga } from 'graphql-yoga';
 import { createServer } from 'node:http';
 
-const CORE = (process.env.CORE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const PORT = Number(process.env.GATEWAY_PORT ?? 9991);
+const CORE = (
+  process.env.CORE_URL ??
+  (process.env.CORE_HOSTPORT
+    ? `http://${process.env.CORE_HOSTPORT}`
+    : 'http://localhost:3000')
+).replace(/\/$/, '');
+const PORT = Number(process.env.PORT ?? process.env.GATEWAY_PORT ?? 9991);
 const API_KEY = process.env.WUNDERGRAPH_API_KEY ?? '';
 
 let meshStateCache: { at: number; value: unknown } | null = null;
@@ -101,7 +106,11 @@ const schema = createSchema({
   },
 });
 
-const yoga = createYoga({ schema, graphqlEndpoint: '/gql' });
+const yoga = createYoga({
+  schema,
+  graphqlEndpoint: '/gql',
+  cors: { origin: '*', credentials: false },
+});
 
 const server = createServer(yoga);
 server.listen(PORT, () => {

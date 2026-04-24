@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { motion, AnimatePresence } from 'framer-motion';
-import { coreWsUrl, fetchMeshState } from '../lib/meshClient';
+import { coreWsUrl, fetchMeshState, voiceUrl } from '../lib/meshClient';
 
 type Agent = {
   id: string;
@@ -112,7 +112,7 @@ export function HomePage() {
     setVoiceBusy(true);
     setVoiceNote('Listening…');
     try {
-      await fetch('/voice/vapi/trigger-call', {
+      await fetch(voiceUrl('/vapi/trigger-call'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

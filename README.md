@@ -2,6 +2,18 @@
 
 AgentMesh is the **nervous system for AI agents** inside an organisation: a real-time orchestration layer where independent agents discover each other, delegate work, and share outcomes over a central Redis pub/sub mesh. It is the coordination plane that keeps a fleet of autonomous assistants aligned without tight coupling.
 
+## Autonomous mode (always-on)
+
+AgentMesh can now run in an always-on autonomous loop:
+
+- Monitors live web sources listed in `AUTONOMY_SOURCES`
+- Dispatches real work to research + CRM agents
+- Publishes orchestration events on the mesh
+- Writes auditable run logs to `cited.md` with source citations
+- Optionally triggers monetization rails (`x402`, `MPP`, `CDP`, `agentic.market`)
+- Optionally triggers a voice briefing call through Vapi
+- Optionally reads/writes long-term memory through Redis Agent Memory Server
+
 ## Architecture
 
 ```
@@ -64,11 +76,78 @@ python -m venv venv
    npm run dev
    ```
 
+### Key autonomous env vars
+
+- `AUTONOMY_ENABLED=true`
+- `AUTONOMY_INTERVAL_SECONDS=180`
+- `AUTONOMY_SOURCES=<comma-separated URLs>`
+- `AUTONOMY_BRIEFING_PHONE=<E.164>`
+- `VOICE_URL=http://localhost:3004`
+- `AGENT_MEMORY_API_URL=http://localhost:8000`
+
+Monetization rails (optional):
+
+- `X402_ENDPOINT`, `X402_API_KEY`
+- `MPP_ENDPOINT`, `MPP_API_KEY`
+- `CDP_ENDPOINT`, `CDP_API_KEY`
+- `AGENTIC_MARKET_ENDPOINT`, `AGENTIC_MARKET_API_KEY`
+
+Redis memory & MCP (optional):
+
+- `AGENT_MEMORY_API_URL`, `AGENT_MEMORY_API_KEY`
+- `AGENT_MEMORY_USER_ID`, `AGENT_MEMORY_SESSION_ID`, `AGENT_MEMORY_LIMIT`
+- `REDIS_MCP_URL`
+
+Audit output:
+
+- `cited.md` is appended every autonomous cycle.
+
 5. Or run the full stack with Docker:
 
    ```bash
    docker compose up --build
    ```
+
+## Deploy to Render (production test)
+
+This repository includes a Render Blueprint at `render.yaml` that provisions:
+
+- Render Redis (`agentmesh-redis`)
+- Core API
+- Research, Sales CRM, and Code Review agents
+- Voice service
+- Gateway service
+- Static dashboard site
+
+### Steps
+
+1. Push this repo to GitHub.
+2. In Render, choose **New +** -> **Blueprint**.
+3. Select your repo; Render reads `render.yaml`.
+4. Fill required secret env vars in Render before first test:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `TINYFISH_API_KEY`
+   - `VAPI_API_KEY`
+   - `VAPI_PHONE_NUMBER_ID`
+   - `VAPI_ASSISTANT_ID`
+   - optional: `AGENT_MEMORY_*`
+   - optional: `GHOST_*`, `NEXLA_*`
+5. Deploy all services.
+
+### Validate in web environment
+
+- `https://agentmesh-core.onrender.com/health`
+- `https://agentmesh-gateway.onrender.com/gql`
+- `https://agentmesh-voice.onrender.com/health`
+- Dashboard: `https://agentmesh-dashboard.onrender.com`
+
+If your Render service names differ from defaults, update URLs in `render.yaml` (`CORE_URL`, `AGENT_ENDPOINT`, `VITE_*` values) and redeploy.
+
+## Redis AI integrations
+
+- Runtime memory integration: `docs/redis-agent-stack.md`
+- MCP server setup for Redis tooling in MCP-compatible clients: `docs/redis-agent-stack.md`
 
 ## Registering a custom agent
 

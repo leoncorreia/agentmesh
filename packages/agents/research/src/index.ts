@@ -6,8 +6,13 @@ import {
 import { createAgentServer } from '@agentmesh/agent-base';
 import type { MeshEvent, TaskRequest, TaskResult } from '@agentmesh/core/types';
 
-const CORE = (process.env.CORE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const PORT = Number(process.env.AGENT_PORT ?? 3001);
+const CORE = (
+  process.env.CORE_URL ??
+  (process.env.CORE_HOSTPORT
+    ? `http://${process.env.CORE_HOSTPORT}`
+    : 'http://localhost:3000')
+).replace(/\/$/, '');
+const PORT = Number(process.env.PORT ?? process.env.AGENT_PORT ?? 3001);
 const AGENT_ID = process.env.AGENT_ID ?? uuidv4();
 const PUBLIC_HOST = process.env.AGENT_PUBLIC_HOST ?? 'localhost';
 const ENDPOINT =
@@ -50,31 +55,29 @@ async function invokeClaude(system: string, user: string): Promise<string> {
   return block && 'text' in block ? String(block.text) : '';
 }
 
-async function runTinyfish(query: string): Promise<string> {
+async function runTinyfish(query: string, sourceUrl?: string): Promise<string> {
   const key = process.env.TINYFISH_API_KEY;
-  const agentId = process.env.TINYFISH_AGENT_ID;
-  if (
-    !key ||
-    key.startsWith('PLACEHOLDER') ||
-    !agentId ||
-    agentId.startsWith('PLACEHOLDER')
-  ) {
+  if (!key || key.startsWith('PLACEHOLDER')) {
     return `[demo] Tinyfish not configured. Query was: ${query}`;
   }
+  // Use Tinyfish Automation API (SSE) so no agent ID is required.
   const res = await fetch(
-    `https://api.tinyfish.io/v1/agents/${agentId}/run`,
+    'https://agent.tinyfish.ai/v1/automation/run-sse',
     {
       method: 'POST',
       headers: {
+        'X-API-Key': key,
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({ task: query }),
+      body: JSON.stringify({
+        url: sourceUrl || 'https://news.ycombinator.com/jobs',
+        goal: query,
+      }),
     },
   );
   if (!res.ok) return `[demo] Tinyfish error ${res.status}`;
-  const data = (await res.json()) as Record<string, unknown>;
-  return JSON.stringify(data).slice(0, 20_000);
+  const text = await res.text();
+  return text.slice(0, 20_000);
 }
 
 async function publishMeshEvent(event: MeshEvent): Promise<void> {
@@ -120,7 +123,8 @@ void createAgentServer({
         };
       }
       const query = String(task.input.query ?? '');
-      const scraped = await runTinyfish(query);
+      const sourceUrl = String(task.input.sourceUrl ?? '');
+      const scraped = await runTinyfish(query, sourceUrl || undefined);
       const summary = await invokeClaude(
         'You are a competitive intelligence analyst. Summarise the key findings concisely. Flag any deal risks.',
         scraped,

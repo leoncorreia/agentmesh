@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { coreUrl } from '../lib/meshClient';
 
 export function VoicePage() {
   const [transcript, setTranscript] = useState<string | null>(null);
@@ -15,7 +16,7 @@ export function VoicePage() {
         onClick={async () => {
           const key = window.prompt('Redis transcript key (call id)');
           if (!key) return;
-          const res = await fetch(`/core/health`).catch(() => null);
+          const res = await fetch(coreUrl('/health')).catch(() => null);
           setTranscript(
             res
               ? 'Connect Redis CLI to read mesh:voice:transcript:' + key

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM --platform=linux/amd64 cgr.dev/chainguard/node:latest AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY tsconfig.base.json ./
@@ -6,7 +6,7 @@ COPY packages ./packages
 RUN npm ci
 RUN npm run build -w @agentmesh/gateway
 
-FROM node:20-alpine
+FROM --platform=linux/amd64 cgr.dev/chainguard/node:latest
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules

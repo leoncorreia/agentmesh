@@ -33,15 +33,25 @@ export async function createAgentServer(opts: AgentServerOptions): Promise<void>
     return opts.handlers.onTask(task);
   });
 
-  async function register(): Promise<void> {
-    const res = await fetch(`${core}/agents/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts.registration),
-    });
-    if (!res.ok) {
-      throw new Error(`register failed: ${res.status} ${await res.text()}`);
+  async function registerWithRetry(): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      try {
+        const res = await fetch(`${core}/agents/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(opts.registration),
+        });
+        if (!res.ok) {
+          throw new Error(`register failed: ${res.status} ${await res.text()}`);
+        }
+        return;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
     }
+    throw lastError instanceof Error ? lastError : new Error('register failed');
   }
 
   async function beat(): Promise<void> {
@@ -50,7 +60,7 @@ export async function createAgentServer(opts: AgentServerOptions): Promise<void>
     });
   }
 
-  await register();
+  await registerWithRetry();
   const interval = setInterval(() => {
     void beat();
   }, 15_000);
