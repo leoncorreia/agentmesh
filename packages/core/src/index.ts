@@ -110,8 +110,47 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
         agent.id,
         req.originAgentId === 'user' ? 'user' : String(req.originAgentId),
       );
-      return { ...raw, output, durationMs: Date.now() - started };
+      const result = { ...raw, output, durationMs: Date.now() - started };
+      // Remote agents do not run runLocalTask's publish callback — surface work in the dashboard feed.
+      const done: MeshEvent = {
+        id: uuidv4(),
+        topic: 'task.remote.completed',
+        sourceAgentId: agent.id,
+        payload: {
+          taskId: req.id,
+          targetCapability: req.targetCapability,
+          status: result.status,
+          agentName: agent.name,
+        },
+        timestamp: new Date(),
+      };
+      pushEvent(done);
+      broadcast({ type: 'event', data: done });
+      try {
+        await withTimeout(publish(done.topic, done), undefined, 1200);
+      } catch {
+        /* best-effort bus */
+      }
+      return result;
     } catch (e) {
+      const failed: MeshEvent = {
+        id: uuidv4(),
+        topic: 'task.remote.failed',
+        sourceAgentId: agent.id,
+        payload: {
+          taskId: req.id,
+          targetCapability: req.targetCapability,
+          error: e instanceof Error ? e.message : 'dispatch failed',
+        },
+        timestamp: new Date(),
+      };
+      pushEvent(failed);
+      broadcast({ type: 'event', data: failed });
+      try {
+        await withTimeout(publish(failed.topic, failed), undefined, 1200);
+      } catch {
+        /* best-effort bus */
+      }
       return {
         taskId: req.id,
         agentId: agent.id,
