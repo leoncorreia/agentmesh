@@ -19,6 +19,19 @@ export async function fetchAgents(): Promise<unknown[]> {
   return (await res.json()) as unknown[];
 }
 
+export type LatestReportsPayload = {
+  generatedAt: string;
+  lastAutonomyStatus: Record<string, unknown>;
+  recentEvents: unknown[];
+  citedMarkdown: string;
+};
+
+export async function fetchLatestReports(): Promise<LatestReportsPayload> {
+  const res = await fetch(`${coreBase.replace(/\/$/, '')}/reports/latest`);
+  if (!res.ok) throw new Error(`reports/latest failed: ${res.status}`);
+  return (await res.json()) as LatestReportsPayload;
+}
+
 export function coreWsUrl(): string {
   if (wsOverride) return wsOverride;
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';

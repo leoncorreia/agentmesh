@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import ForceGraph2D from 'react-force-graph-2d';
 import { motion, AnimatePresence } from 'framer-motion';
 import { coreWsUrl, fetchMeshState, voiceUrl } from '../lib/meshClient';
@@ -137,6 +138,21 @@ export function HomePage() {
         <Metric title="Events / min" value={String(Math.min(events.length, 99))} />
         <Metric title="Active tasks" value={String(tasks.length)} />
         <Metric title="Avg latency (ms)" value="42" />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Link
+          to="/reports"
+          className="inline-flex items-center px-4 py-2 rounded-lg bg-mesh-accent text-mesh-bg text-sm font-semibold"
+        >
+          View cited.md report
+        </Link>
+        <Link
+          to="/settings"
+          className="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 text-white text-sm font-semibold"
+        >
+          Autonomy settings
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

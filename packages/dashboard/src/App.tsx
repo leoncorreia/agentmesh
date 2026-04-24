@@ -5,6 +5,7 @@ import { AgentDetailPage } from './pages/AgentDetailPage';
 import { EventsPage } from './pages/EventsPage';
 import { VoicePage } from './pages/VoicePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-md text-sm ${isActive ? 'bg-mesh-accent/20 text-mesh-accent' : 'text-slate-300 hover:text-white'}`;
@@ -26,6 +27,9 @@ export default function App() {
           <NavLink to="/events" className={linkClass}>
             Events
           </NavLink>
+          <NavLink to="/reports" className={linkClass}>
+            Report
+          </NavLink>
           <NavLink to="/voice" className={linkClass}>
             Voice
           </NavLink>
@@ -40,6 +44,7 @@ export default function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/voice" element={<VoicePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

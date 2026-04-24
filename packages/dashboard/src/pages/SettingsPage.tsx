@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { coreUrl, fetchMeshState } from '../lib/meshClient';
 
 export function SettingsPage() {
@@ -145,6 +146,12 @@ export function SettingsPage() {
         >
           Refresh
         </button>
+        <Link
+          to="/reports"
+          className="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 text-white text-sm font-semibold"
+        >
+          View cited report
+        </Link>
       </div>
       {note ? <p className="text-xs text-slate-300">{note}</p> : null}
       <h2 className="text-sm uppercase tracking-wide text-slate-400">
