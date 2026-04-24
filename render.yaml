@@ -83,6 +83,36 @@ services:
       - key: AGENTIC_MARKET_API_KEY
         sync: false
 
+  - type: pserv
+    name: agent-research
+    runtime: node
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm ci --include=dev && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-research
+    startCommand: node packages/agents/research/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORE_HOSTPORT
+        fromService:
+          type: web
+          name: core
+          property: hostport
+      - key: AGENT_PUBLIC_HOST
+        value: agent-research
+      - key: AGENT_ID
+        value: render-research
+      - key: AWS_REGION
+        value: us-east-1
+      - key: BEDROCK_MODEL_ID
+        value: anthropic.claude-3-5-sonnet-20241022-v2:0
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: TINYFISH_API_KEY
+        sync: false
+
   - type: web
     name: dashboard
     runtime: static

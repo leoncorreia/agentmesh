@@ -86,6 +86,46 @@ async function buildMeshState(): Promise<MeshState> {
 
 async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
   const started = Date.now();
+  const candidates = await withTimeout(findByCapability(req.targetCapability), []);
+  const online = candidates.filter((a) => a.status === 'online');
+  if (online.length > 0) {
+    online.sort(
+      (a, b) => new Date(a.lastSeen).getTime() - new Date(b.lastSeen).getTime(),
+    );
+    const agent = online[0]!;
+    activeTasks.push(req);
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), req.timeoutMs);
+      const res = await fetch(`${agent.endpoint.replace(/\/$/, '')}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+        signal: ac.signal,
+      });
+      clearTimeout(t);
+      const raw = (await res.json()) as TaskResult;
+      const output = await transformPayload(
+        raw.output,
+        agent.id,
+        req.originAgentId === 'user' ? 'user' : String(req.originAgentId),
+      );
+      return { ...raw, output, durationMs: Date.now() - started };
+    } catch (e) {
+      return {
+        taskId: req.id,
+        agentId: agent.id,
+        output: {},
+        durationMs: Date.now() - started,
+        status: 'timeout',
+        error: e instanceof Error ? e.message : 'dispatch failed',
+      };
+    } finally {
+      const idx = activeTasks.findIndex((t) => t.id === req.id);
+      if (idx >= 0) activeTasks.splice(idx, 1);
+    }
+  }
+
   const local = await runLocalTask(req, async (topic, event) => {
     pushEvent(event);
     broadcast({ type: 'event', data: event });
@@ -104,53 +144,14 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
     return { ...local, output, durationMs: Date.now() - started };
   }
 
-  const candidates = await withTimeout(findByCapability(req.targetCapability), []);
-  const online = candidates.filter((a) => a.status === 'online');
-  if (online.length === 0) {
-    return {
-      taskId: req.id,
-      agentId: '',
-      output: {},
-      durationMs: Date.now() - started,
-      status: 'error',
-      error: 'No online or local agent for capability',
-    };
-  }
-  online.sort(
-    (a, b) => new Date(a.lastSeen).getTime() - new Date(b.lastSeen).getTime(),
-  );
-  const agent = online[0]!;
-  activeTasks.push(req);
-  try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), req.timeoutMs);
-    const res = await fetch(`${agent.endpoint.replace(/\/$/, '')}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-      signal: ac.signal,
-    });
-    clearTimeout(t);
-    const raw = (await res.json()) as TaskResult;
-    const output = await transformPayload(
-      raw.output,
-      agent.id,
-      req.originAgentId === 'user' ? 'user' : String(req.originAgentId),
-    );
-    return { ...raw, output, durationMs: Date.now() - started };
-  } catch (e) {
-    return {
-      taskId: req.id,
-      agentId: agent.id,
-      output: {},
-      durationMs: Date.now() - started,
-      status: 'timeout',
-      error: e instanceof Error ? e.message : 'dispatch failed',
-    };
-  } finally {
-    const idx = activeTasks.findIndex((t) => t.id === req.id);
-    if (idx >= 0) activeTasks.splice(idx, 1);
-  }
+  return {
+    taskId: req.id,
+    agentId: '',
+    output: {},
+    durationMs: Date.now() - started,
+    status: 'error',
+    error: 'No online or local agent for capability',
+  };
 }
 
 export async function buildServer() {
