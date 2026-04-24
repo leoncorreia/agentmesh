@@ -1,39 +1,22 @@
-import { GraphQLClient, gql } from 'graphql-request';
-
 function env(name: string): string | undefined {
   const v = (import.meta.env as Record<string, string | undefined>)[name];
   return v && v.trim().length > 0 ? v : undefined;
 }
 
-const gatewayBase = env('VITE_GATEWAY_URL') ?? window.location.origin;
 const coreBase = env('VITE_CORE_URL') ?? window.location.origin;
 const voiceBase = env('VITE_VOICE_URL') ?? window.location.origin;
 const wsOverride = env('VITE_CORE_WS_URL');
 
-const client = new GraphQLClient(`${gatewayBase.replace(/\/$/, '')}/gql`, {
-  headers: {},
-});
-
-const meshQuery = gql`
-  query Mesh {
-    meshState
-  }
-`;
-
-const agentsQuery = gql`
-  query Agents {
-    agents
-  }
-`;
-
 export async function fetchMeshState(): Promise<Record<string, unknown>> {
-  const data = (await client.request(meshQuery)) as { meshState: unknown };
-  return data.meshState as Record<string, unknown>;
+  const res = await fetch(`${coreBase.replace(/\/$/, '')}/mesh/state`);
+  if (!res.ok) throw new Error(`mesh-state failed: ${res.status}`);
+  return (await res.json()) as Record<string, unknown>;
 }
 
 export async function fetchAgents(): Promise<unknown[]> {
-  const data = (await client.request(agentsQuery)) as { agents: unknown[] };
-  return data.agents;
+  const res = await fetch(`${coreBase.replace(/\/$/, '')}/agents`);
+  if (!res.ok) throw new Error(`agents failed: ${res.status}`);
+  return (await res.json()) as unknown[];
 }
 
 export function coreWsUrl(): string {

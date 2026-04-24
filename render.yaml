@@ -22,13 +22,23 @@ services:
         fromDatabase:
           name: agentmesh-redis
           property: connectionString
+      - key: REDIS_MCP_URL
+        fromDatabase:
+          name: agentmesh-redis
+          property: connectionString
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY
         sync: false
-      - key: WUNDERGRAPH_API_URL
+      - key: TINYFISH_API_KEY
         sync: false
-      - key: WUNDERGRAPH_API_KEY
+      - key: VAPI_API_KEY
+        sync: false
+      - key: VAPI_PHONE_NUMBER_ID
+        sync: false
+      - key: VAPI_ASSISTANT_ID
+        sync: false
+      - key: VAPI_WEBHOOK_URL
         sync: false
       - key: GHOST_API_URL
         sync: false
@@ -40,41 +50,6 @@ services:
         sync: false
       - key: NEXLA_FLOW_ID
         sync: false
-      - key: VAPI_API_KEY
-        sync: false
-      - key: VAPI_PHONE_NUMBER_ID
-        sync: false
-      - key: VAPI_ASSISTANT_ID
-        sync: false
-      - key: VAPI_WEBHOOK_URL
-        sync: false
-      - key: TINYFISH_API_KEY
-        sync: false
-      - key: TINYFISH_AGENT_ID
-        sync: false
-      - key: INSFORGE_API_KEY
-        sync: false
-      - key: INSFORGE_PROJECT_ID
-        sync: false
-      - key: AKASH_NODE
-        sync: false
-      - key: AKASH_CERT
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: VITE_GATEWAY_URL
-        sync: false
-      - key: VITE_CORE_URL
-        sync: false
-      - key: VITE_CORE_WS_URL
-        sync: false
-      - key: VITE_VOICE_URL
-        sync: false
-      - key: VOICE_HOSTPORT
-        fromService:
-          type: web
-          name: voice
-          property: hostport
       - key: AUTONOMY_ENABLED
         value: "true"
       - key: AUTONOMY_INTERVAL_SECONDS
@@ -85,6 +60,16 @@ services:
         sync: false
       - key: AUTONOMY_MONETIZATION_AMOUNT_USD
         value: "25"
+      - key: AGENT_MEMORY_API_URL
+        sync: false
+      - key: AGENT_MEMORY_API_KEY
+        sync: false
+      - key: AGENT_MEMORY_USER_ID
+        value: agentmesh
+      - key: AGENT_MEMORY_SESSION_ID
+        value: autonomy
+      - key: AGENT_MEMORY_LIMIT
+        value: "5"
       - key: X402_ENDPOINT
         sync: false
       - key: X402_API_KEY
@@ -101,158 +86,6 @@ services:
         sync: false
       - key: AGENTIC_MARKET_API_KEY
         sync: false
-      - key: AGENT_MEMORY_API_URL
-        sync: false
-      - key: AGENT_MEMORY_API_KEY
-        sync: false
-      - key: AGENT_MEMORY_USER_ID
-        value: agentmesh
-      - key: AGENT_MEMORY_SESSION_ID
-        value: autonomy
-      - key: AGENT_MEMORY_LIMIT
-        value: "5"
-      - key: REDIS_MCP_URL
-        fromDatabase:
-          name: agentmesh-redis
-          property: connectionString
-
-  - type: pserv
-    name: agent-research
-    runtime: node
-    plan: starter
-    autoDeploy: true
-    buildCommand: npm ci && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-research
-    startCommand: node packages/agents/research/dist/index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: CORE_HOSTPORT
-        fromService:
-          type: web
-          name: core
-          property: hostport
-      - key: AGENT_PUBLIC_HOST
-        value: agent-research
-      - key: AGENT_ID
-        value: render-research
-      - key: AWS_REGION
-        value: us-east-1
-      - key: BEDROCK_MODEL_ID
-        value: anthropic.claude-3-5-sonnet-20241022-v2:0
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: TINYFISH_API_KEY
-        sync: false
-      - key: TINYFISH_AGENT_ID
-        sync: false
-
-  - type: pserv
-    name: agent-sales-crm
-    runtime: node
-    plan: starter
-    autoDeploy: true
-    buildCommand: npm ci && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-sales-crm
-    startCommand: node packages/agents/sales-crm/dist/index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: CORE_HOSTPORT
-        fromService:
-          type: web
-          name: core
-          property: hostport
-      - key: AGENT_PUBLIC_HOST
-        value: agent-sales-crm
-      - key: AGENT_ID
-        value: render-sales-crm
-      - key: AWS_REGION
-        value: us-east-1
-      - key: BEDROCK_MODEL_ID
-        value: anthropic.claude-3-5-sonnet-20241022-v2:0
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-
-  - type: pserv
-    name: agent-code-review
-    runtime: node
-    plan: starter
-    autoDeploy: true
-    buildCommand: npm ci && npm run build -w @agentmesh/core && npm run build -w @agentmesh/agent-base && npm run build -w @agentmesh/agent-code-review
-    startCommand: node packages/agents/code-review/dist/index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: CORE_HOSTPORT
-        fromService:
-          type: web
-          name: core
-          property: hostport
-      - key: AGENT_PUBLIC_HOST
-        value: agent-code-review
-      - key: AGENT_ID
-        value: render-code-review
-      - key: AWS_REGION
-        value: us-east-1
-      - key: BEDROCK_MODEL_ID
-        value: anthropic.claude-3-5-sonnet-20241022-v2:0
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-
-  - type: web
-    name: voice
-    runtime: node
-    plan: starter
-    autoDeploy: true
-    healthCheckPath: /health
-    buildCommand: npm ci && npm run build -w @agentmesh/voice
-    startCommand: node packages/voice/dist/index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: CORE_HOSTPORT
-        fromService:
-          type: web
-          name: core
-          property: hostport
-      - key: REDIS_URL
-        fromDatabase:
-          name: agentmesh-redis
-          property: connectionString
-      - key: BEDROCK_MODEL_ID
-        value: anthropic.claude-3-5-sonnet-20241022-v2:0
-      - key: VAPI_API_KEY
-        sync: false
-      - key: VAPI_PHONE_NUMBER_ID
-        sync: false
-      - key: VAPI_ASSISTANT_ID
-        sync: false
-      - key: VAPI_WEBHOOK_URL
-        sync: false
-
-  - type: web
-    name: gateway
-    runtime: node
-    plan: starter
-    autoDeploy: true
-    healthCheckPath: /gql
-    buildCommand: npm ci && npm run build -w @agentmesh/gateway
-    startCommand: node packages/gateway/dist/index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: CORE_HOSTPORT
-        fromService:
-          type: web
-          name: core
-          property: hostport
-      - key: WUNDERGRAPH_API_KEY
-        sync: false
 
   - type: web
     name: dashboard
@@ -262,8 +95,6 @@ services:
     staticPublishPath: dist
     pullRequestPreviewsEnabled: true
     envVars:
-      - key: VITE_GATEWAY_URL
-        sync: false
       - key: VITE_CORE_URL
         sync: false
       - key: VITE_CORE_WS_URL

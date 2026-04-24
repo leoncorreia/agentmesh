@@ -25,6 +25,7 @@ import {
 import { startRouter } from './router.js';
 import { transformPayload } from './transformer.js';
 import { AutonomyController } from './autonomy.js';
+import { localAgentRegistry, runLocalTask } from './localAgents.js';
 
 const recentEvents: MeshEvent[] = [];
 const MAX_EVENTS = 50;
@@ -49,8 +50,12 @@ function broadcast(obj: unknown): void {
 
 async function buildMeshState(): Promise<MeshState> {
   const agents = await getAllAgents();
+  const merged = [...agents];
+  for (const local of localAgentRegistry) {
+    if (!merged.some((a) => a.id === local.id)) merged.push(local);
+  }
   return {
-    agents,
+    agents: merged,
     recentEvents: [...recentEvents],
     activeTasks: [...activeTasks],
   };
@@ -61,13 +66,22 @@ async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
   const candidates = await findByCapability(req.targetCapability);
   const online = candidates.filter((a) => a.status === 'online');
   if (online.length === 0) {
+    const local = await runLocalTask(req, publish);
+    if (local) {
+      const output = await transformPayload(
+        local.output,
+        local.agentId,
+        req.originAgentId === 'user' ? 'user' : String(req.originAgentId),
+      );
+      return { ...local, output, durationMs: Date.now() - started };
+    }
     return {
       taskId: req.id,
       agentId: '',
       output: {},
       durationMs: Date.now() - started,
       status: 'error',
-      error: 'No online agent for capability',
+      error: 'No online or local agent for capability',
     };
   }
   online.sort(
@@ -154,7 +168,12 @@ export async function buildServer() {
   });
 
   app.get('/agents', async () => {
-    return getAllAgents();
+    const remote = await getAllAgents();
+    const merged = [...remote];
+    for (const local of localAgentRegistry) {
+      if (!merged.some((a) => a.id === local.id)) merged.push(local);
+    }
+    return merged;
   });
 
   app.get('/agents/:id', async (request, reply) => {
