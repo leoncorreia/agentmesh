@@ -28,6 +28,12 @@ services:
         sync: false
       - key: TINYFISH_API_KEY
         sync: false
+      - key: GMI_API_BASE
+        sync: false
+      - key: GMI_API_KEY
+        sync: false
+      - key: GMI_MODEL
+        sync: false
       - key: VAPI_API_KEY
         sync: false
       - key: VAPI_PHONE_NUMBER_ID
@@ -111,6 +117,12 @@ services:
       - key: AWS_SECRET_ACCESS_KEY
         sync: false
       - key: TINYFISH_API_KEY
+        sync: false
+      - key: GMI_API_BASE
+        sync: false
+      - key: GMI_API_KEY
+        sync: false
+      - key: GMI_MODEL
         sync: false
 
   - type: web

@@ -9,6 +9,49 @@ const bedrock = new BedrockRuntimeClient({
   region: process.env.AWS_REGION ?? 'us-east-1',
 });
 
+function hasGmiConfig(): boolean {
+  const base = process.env.GMI_API_BASE;
+  const key = process.env.GMI_API_KEY;
+  const model = process.env.GMI_MODEL;
+  return Boolean(base && key && model) &&
+    !base!.startsWith('PLACEHOLDER') &&
+    !key!.startsWith('PLACEHOLDER') &&
+    !model!.startsWith('PLACEHOLDER');
+}
+
+async function invokeGmi(system: string, user: string): Promise<string | null> {
+  if (!hasGmiConfig()) return null;
+  const base = process.env.GMI_API_BASE!.replace(/\/$/, '');
+  const key = process.env.GMI_API_KEY!;
+  const model = process.env.GMI_MODEL!;
+  try {
+    const res = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user.slice(0, 80_000) },
+        ],
+        temperature: 0.2,
+        max_tokens: 700,
+      }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const text = body.choices?.[0]?.message?.content;
+    return text ? String(text) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const localAgentRegistry: AgentRegistration[] = [
   {
     id: 'local-research',
@@ -49,6 +92,9 @@ export const localAgentRegistry: AgentRegistration[] = [
 ];
 
 async function invokeClaude(system: string, user: string): Promise<string> {
+  const gmi = await invokeGmi(system, user);
+  if (gmi && gmi.trim().length > 0) return gmi;
+
   const modelId = process.env.BEDROCK_MODEL_ID ?? '';
   if (
     !modelId ||
