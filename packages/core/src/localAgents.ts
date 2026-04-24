@@ -85,17 +85,27 @@ async function runTinyfish(query: string, sourceUrl?: string): Promise<string> {
   if (!key || key.startsWith('PLACEHOLDER')) {
     return `[demo] Tinyfish not configured. Query: ${query}`;
   }
-  const res = await fetch('https://agent.tinyfish.ai/v1/automation/run-sse', {
-    method: 'POST',
-    headers: {
-      'X-API-Key': key,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: sourceUrl || 'https://news.ycombinator.com/jobs',
-      goal: query,
-    }),
-  });
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 20_000);
+  let res: Response;
+  try {
+    res = await fetch('https://agent.tinyfish.ai/v1/automation/run-sse', {
+      method: 'POST',
+      headers: {
+        'X-API-Key': key,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: sourceUrl || 'https://news.ycombinator.com/jobs',
+        goal: query,
+      }),
+      signal: ac.signal,
+    });
+  } catch (e) {
+    return `[demo] Tinyfish timeout/error: ${e instanceof Error ? e.message : 'request failed'}`;
+  } finally {
+    clearTimeout(t);
+  }
   if (!res.ok) return `[demo] Tinyfish error ${res.status}`;
   const text = await res.text();
   return text.slice(0, 20_000);
