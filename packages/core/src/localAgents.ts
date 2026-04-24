@@ -56,7 +56,21 @@ async function invokeClaude(system: string, user: string): Promise<string> {
     !process.env.AWS_ACCESS_KEY_ID ||
     process.env.AWS_ACCESS_KEY_ID.startsWith('PLACEHOLDER')
   ) {
-    return `[demo] Bedrock unavailable. Context: ${user.slice(0, 500)}`;
+    const text = user.replace(/\s+/g, ' ').toLowerCase();
+    const competitors = ['openai', 'anthropic', 'google', 'microsoft', 'meta']
+      .filter((x) => text.includes(x))
+      .map((x) => x[0]!.toUpperCase() + x.slice(1));
+    const riskHint =
+      /risk|at-risk|downgrade|churn|urgent|loss/i.test(user) ||
+      /competitor/i.test(user);
+    const competitorLine =
+      competitors.length > 0
+        ? ` Key entities observed: ${competitors.slice(0, 3).join(', ')}.`
+        : '';
+    const riskLine = riskHint
+      ? ' Potential deal risk detected; prioritize customer follow-up and competitive positioning.'
+      : ' No immediate critical risk detected.';
+    return `Bedrock is unavailable, so this is a heuristic summary from the latest live signals.${competitorLine}${riskLine}`;
   }
   const body = {
     anthropic_version: 'bedrock-2023-05-31',
