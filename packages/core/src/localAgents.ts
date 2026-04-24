@@ -19,14 +19,28 @@ function hasGmiConfig(): boolean {
     !model!.startsWith('PLACEHOLDER');
 }
 
+/** Host-only base; we append /v1/chat/completions (strips trailing /v1 so env mistakes don't double-path). */
+function gmiApiBase(): string {
+  let b = process.env.GMI_API_BASE!.trim().replace(/\/+$/, '');
+  if (b.toLowerCase().endsWith('/v1')) b = b.slice(0, -3).replace(/\/+$/, '');
+  return b;
+}
+
 async function invokeGmi(system: string, user: string): Promise<string | null> {
-  if (!hasGmiConfig()) return null;
-  const base = process.env.GMI_API_BASE!.replace(/\/$/, '');
+  if (!hasGmiConfig()) {
+    console.warn('[agentmesh] GMI skipped: set GMI_API_BASE, GMI_API_KEY, GMI_MODEL on this service');
+    return null;
+  }
+  const base = gmiApiBase();
   const key = process.env.GMI_API_KEY!;
   const model = process.env.GMI_MODEL!;
+  const url = `${base}/v1/chat/completions`;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 45_000);
   try {
-    const res = await fetch(`${base}/v1/chat/completions`, {
+    const res = await fetch(url, {
       method: 'POST',
+      signal: ac.signal,
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
@@ -41,14 +55,29 @@ async function invokeGmi(system: string, user: string): Promise<string | null> {
         max_tokens: 700,
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errBody = (await res.text()).slice(0, 400);
+      console.warn(
+        `[agentmesh] GMI ${url} failed HTTP ${res.status} ${res.statusText}: ${errBody}`,
+      );
+      return null;
+    }
     const body = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
     const text = body.choices?.[0]?.message?.content;
-    return text ? String(text) : null;
-  } catch {
+    if (!text || !String(text).trim()) {
+      console.warn('[agentmesh] GMI returned no choices[0].message.content');
+      return null;
+    }
+    return String(text);
+  } catch (e) {
+    console.warn(
+      `[agentmesh] GMI request error: ${e instanceof Error ? e.message : 'unknown'}`,
+    );
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -116,7 +145,7 @@ async function invokeClaude(system: string, user: string): Promise<string> {
     const riskLine = riskHint
       ? ' Potential deal risk detected; prioritize customer follow-up and competitive positioning.'
       : ' No immediate critical risk detected.';
-    return `Bedrock is unavailable, so this is a heuristic summary from the latest live signals.${competitorLine}${riskLine}`;
+    return `No LLM summary from GMI or Bedrock; using a heuristic read of the latest live signals.${competitorLine}${riskLine}`;
   }
   const body = {
     anthropic_version: 'bedrock-2023-05-31',

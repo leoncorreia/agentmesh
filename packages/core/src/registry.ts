@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { AgentRegistration } from './types.js';
 import { MeshBusError } from './bus.js';
 import { setAgentStatus } from './bus.js';
+import { getValidatedRedisUrl } from './redisUrl.js';
 
 const REGISTRY_HASH = 'mesh:registry';
 const HEARTBEAT_PREFIX = 'mesh:heartbeat:';
@@ -11,16 +12,20 @@ let redis: Redis | null = null;
 let offlineSweep: ReturnType<typeof setInterval> | null = null;
 
 function getRedisUrl(): string {
-  const url = process.env.REDIS_URL;
-  if (!url || url.startsWith('PLACEHOLDER')) {
-    throw new MeshBusError('REDIS_URL is not configured');
+  try {
+    return getValidatedRedisUrl();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Invalid REDIS_URL';
+    throw new MeshBusError(msg, e);
   }
-  return url;
 }
 
 function ensureRedis(): Redis {
   if (!redis) {
     redis = new Redis(getRedisUrl(), { maxRetriesPerRequest: null });
+    redis.on('error', (err: Error) => {
+      console.error(`[agentmesh] Redis registry: ${err.message}`);
+    });
   }
   return redis;
 }

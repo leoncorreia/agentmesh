@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
 import type { MeshEvent } from './types.js';
+import { getValidatedRedisUrl } from './redisUrl.js';
 
 export class MeshBusError extends Error {
   constructor(
@@ -40,11 +41,18 @@ export function onMeshEventFromBus(fn: MeshEventListener): () => void {
 }
 
 function getRedisUrl(): string {
-  const url = process.env.REDIS_URL;
-  if (!url || url.startsWith('PLACEHOLDER')) {
-    throw new MeshBusError('REDIS_URL is not configured');
+  try {
+    return getValidatedRedisUrl();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Invalid REDIS_URL';
+    throw new MeshBusError(msg, e);
   }
-  return url;
+}
+
+function attachRedisErrorLogging(r: Redis, label: string): void {
+  r.on('error', (err: Error) => {
+    console.error(`[agentmesh] Redis ${label}: ${err.message}`);
+  });
 }
 
 function attachSubListeners(s: Redis): void {
@@ -91,6 +99,8 @@ function ensureClients(): { pub: Redis; sub: Redis } {
       const url = getRedisUrl();
       pub = new Redis(url, { maxRetriesPerRequest: null });
       sub = new Redis(url, { maxRetriesPerRequest: null });
+      attachRedisErrorLogging(pub, 'publisher');
+      attachRedisErrorLogging(sub, 'subscriber');
       attachSubListeners(sub);
     } catch (e) {
       throw new MeshBusError('Failed to create Redis clients', e);

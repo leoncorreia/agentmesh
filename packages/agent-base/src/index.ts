@@ -17,6 +17,10 @@ export async function createAgentServer(opts: AgentServerOptions): Promise<void>
   const core = opts.coreUrl.replace(/\/$/, '');
   const app = Fastify({ logger: true });
 
+  // Render (and some load balancers) probe HEAD / or GET /; avoid noisy 404s.
+  app.get('/', async () => ({ ok: true, role: 'agentmesh-agent' }));
+  app.head('/', async (_, reply) => reply.code(204).send());
+
   app.get('/health', async () => ({ ok: true }));
 
   app.post('/events', async (request) => {

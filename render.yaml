@@ -1,8 +1,15 @@
-databases:
-  - name: agentmesh-redis
-    plan: free
+# `databases:` in Render Blueprints is PostgreSQL only — do not use it for Redis.
+# Use `type: keyvalue` under `services` for Redis®-compatible Key Value.
 
 services:
+  # Real Redis (Render Key Value). connectionString is redis:// on the private network.
+  - type: keyvalue
+    name: agentmesh-kv
+    plan: free
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
   - type: web
     name: core
     runtime: node
@@ -19,9 +26,15 @@ services:
       - key: BEDROCK_MODEL_ID
         value: anthropic.claude-3-5-sonnet-20241022-v2:0
       - key: REDIS_URL
-        sync: false
+        fromService:
+          name: agentmesh-kv
+          type: keyvalue
+          property: connectionString
       - key: REDIS_MCP_URL
-        sync: false
+        fromService:
+          name: agentmesh-kv
+          type: keyvalue
+          property: connectionString
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY
