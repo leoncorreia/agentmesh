@@ -14,29 +14,26 @@ AgentMesh can now run in an always-on autonomous loop:
 - Optionally triggers a voice briefing call through Vapi
 - Optionally reads/writes long-term memory through Redis Agent Memory Server
 
-## Architecture
+## Architecture (lean production stack)
 
 ```
-                    ┌─────────────┐
-                    │  Dashboard  │  React + Vite + WS
-                    │  (live UI)  │
-                    └──────┬──────┘
-                           │ GraphQL /gql (2s mesh cache)
-                    ┌──────▼──────┐
-                    │   Gateway   │  GraphQL façade over Core
-                    └──────┬──────┘
-                           │ REST
-┌──────────┐        ┌──────▼──────┐        ┌────────────┐
-│  Agents  │◄──────►│    Core     │◄──────►│   Redis    │
-│ research │ register│  Fastify   │ pub/sub│  event bus │
-│ sales-crm│ heartbeat router    │        └────────────┘
-│code-review│       │  registry   │
-└──────────┘        └──────┬──────┘
-                            │
-                     ┌──────▼──────┐
-                     │    Voice    │  Vapi webhooks + outbound
-                     └─────────────┘
+┌──────────────────┐     REST + WebSocket      ┌─────────────────────┐
+│    Dashboard     │ ───────────────────────► │       Core          │
+│  React + Vite    │   VITE_CORE_URL / WS      │  Fastify            │
+└──────────────────┘                           │  registry + dispatch │
+                                               │  autonomy + cited.md │
+┌──────────────────┐   POST /tasks (private)   │  Vapi trigger (HTTP) │
+│ agent-research   │ ◄────────────────────────│                     │
+│  (pserv)         │   register + heartbeat    └──────────┬──────────┘
+└──────────────────┘                                      │
+                                                            ▼
+                                               ┌─────────────────────┐
+                                               │ Render Key Value    │
+                                               │ (Redis / Valkey 8)  │
+                                               └─────────────────────┘
 ```
+
+Local development can still run separate agent packages, voice, and gateway from `docker compose` / `npm run dev`; the **Render blueprint** in `render.yaml` targets **core + dashboard + Key Value + agent-research** only.
 
 ## Prerequisites
 
@@ -80,10 +77,14 @@ python -m venv venv
 
 - `AUTONOMY_ENABLED=true`
 - `AUTONOMY_INTERVAL_SECONDS=180`
+- `AUTONOMY_TASK_TIMEOUT_MS` — max wait for **core → remote agent** `/tasks` (default `240000`; Render blueprint sets `300000`).
 - `AUTONOMY_SOURCES=<comma-separated URLs>`
 - `AUTONOMY_BRIEFING_PHONE=<E.164>`
-- `VOICE_URL=http://localhost:3004`
-- `AGENT_MEMORY_API_URL=http://localhost:8000`
+- `REDIS_URL` / `REDIS_MCP_URL` — full `redis://` or `rediss://` URL (not Postgres; not a bare path).
+- **LLM:** `GMI_API_BASE`, `GMI_API_KEY`, `GMI_MODEL` (OpenAI-compatible) and/or **AWS Bedrock** credentials.
+- **Web research:** `TINYFISH_API_KEY`
+- **Voice on core:** `VAPI_*` keys; on Render, `core` calls Vapi directly (no separate voice service).
+- Optional: `AGENT_MEMORY_API_URL`, `AGENT_MEMORY_API_KEY`, …
 
 Monetization rails (optional):
 
@@ -110,39 +111,28 @@ Audit output:
 
 ## Deploy to Render (production test)
 
-This repository includes a Render Blueprint at `render.yaml` that provisions:
+Blueprint `render.yaml` provisions:
 
-- Render Redis (`agentmesh-redis`)
-- Core API
-- Research, Sales CRM, and Code Review agents
-- Voice service
-- Gateway service
-- Static dashboard site
+- **Key Value** `agentmesh-kv` (Redis-compatible / Valkey) — **`databases:` is Postgres-only; do not use it for Redis.**
+- **Web:** `core` (Fastify: mesh, autonomy, Vapi trigger, `cited.md`, reports).
+- **Private service:** `agent-research` (real remote worker for `competitor-intel` / `web-research`).
+- **Static:** `dashboard` (set `VITE_CORE_URL` + `VITE_CORE_WS_URL` to your public **core** URL).
 
 ### Steps
 
 1. Push this repo to GitHub.
-2. In Render, choose **New +** -> **Blueprint**.
-3. Select your repo; Render reads `render.yaml`.
-4. Fill required secret env vars in Render before first test:
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-   - `TINYFISH_API_KEY`
-   - `VAPI_API_KEY`
-   - `VAPI_PHONE_NUMBER_ID`
-   - `VAPI_ASSISTANT_ID`
-   - optional: `AGENT_MEMORY_*`
-   - optional: `GHOST_*`, `NEXLA_*`
-5. Deploy all services.
+2. Render → **New +** → **Blueprint** → select repo (reads `render.yaml`).
+3. Sync env: fill **`sync: false`** secrets in the dashboard (API keys, `AUTONOMY_SOURCES`, `AUTONOMY_BRIEFING_PHONE`, optional rails).
+4. **`REDIS_URL`** on `core` must come from **Key Value** `agentmesh-kv` (Blueprint wires `fromService` → `connectionString`). Remove any old manual Postgres URL.
+5. Deploy **core**, **agent-research**, **dashboard**; use **Clear build cache** if agents show stale `dist`.
 
-### Validate in web environment
+### Validate (replace with your hostnames)
 
-- `https://agentmesh-core.onrender.com/health`
-- `https://agentmesh-gateway.onrender.com/gql`
-- `https://agentmesh-voice.onrender.com/health`
-- Dashboard: `https://agentmesh-dashboard.onrender.com`
-
-If your Render service names differ from defaults, update URLs in `render.yaml` (`CORE_URL`, `AGENT_ENDPOINT`, `VITE_*` values) and redeploy.
+- `GET https://<core>/health` → `{"ok":true}`
+- `GET https://<core>/agents` → includes **`render-research`** with `"status":"online"`
+- `GET https://<core>/mesh/state` → agents + `recentEvents`
+- `GET https://<core>/reports/latest` → `citedMarkdown` + snapshot
+- Dashboard: open static URL with **`VITE_CORE_URL`** pointing at **core**
 
 ## Redis AI integrations
 
@@ -157,15 +147,56 @@ If your Render service names differ from defaults, update URLs in `render.yaml` 
 4. Implement **POST** `{endpoint}/tasks` to accept `TaskRequest` and return `TaskResult`.  
 5. **DELETE** `{CORE_URL}/agents/:id` when shutting down permanently.
 
-## Demo script
+## Demo script (local)
 
-With Core, Redis, all three agents, and Voice running:
+With Core, Redis, agents, and optional Voice running:
 
 ```bash
 npm run demo
 ```
 
-The script prints timestamped steps, waits for mesh events, and attempts a Vapi outbound call (skipped if Vapi is not configured).
+The script prints timestamped steps, waits for mesh events, and may attempt a Vapi outbound call (skipped if Vapi is not configured).
+
+**Production demo path:** use the **dashboard** → **Settings** (autonomy config + **Run now**), **Events** (`task.remote.completed` / autonomy topics), and **`GET /reports/latest`** on **core**.
+
+---
+
+## Hackathon submission & demo (~3 minutes)
+
+### What you are submitting (one paragraph you can paste)
+
+**AgentMesh** is a **deployed** autonomous system: **core** runs an **always-on autonomy loop** over **live URLs**, **dispatches** `competitor-intel` to a **real separate `agent-research` service** (with **Tinyfish** + **GMI**/Bedrock), runs **in-process CRM/code** paths when needed, **publishes mesh events** on **Render Key Value (Redis/Valkey)**, **appends auditable `cited.md`**, optionally hits **monetization rails** (x402 / MPP / CDP / agentic.market), and can **place a Vapi** outbound briefing. **Dashboard** is the live control plane (agents, events, autonomy settings).
+
+### Sponsor tools (pick 3+ that are true for your live demo)
+
+| Sponsor | Role in this repo |
+|--------|-------------------|
+| **Redis / Render Key Value** | Registry, pub/sub bus, orchestration state |
+| **Tinyfish** | Live web automation (`run-sse`) before LLM summary |
+| **Vapi** | Outbound voice briefing from autonomy (`/vapi/trigger-call` on core) |
+| **GMI Cloud** | OpenAI-compatible chat completions (primary LLM path when env set) |
+| **AWS Bedrock** | Optional Claude path when credentials set |
+| **WunderGraph** | Optional sponsor signal ingestion (`sponsors.ts` / autonomy) |
+| **Chainguard** | Hardened images in Dockerfiles (optional local/CI Docker path) |
+
+### Done in repo (nothing else required for “code complete”)
+
+- Lean **Render** blueprint, **Key Value** Redis URL wiring, **core** + **agent-research** + **dashboard**.
+- Autonomy, **`cited.md`**, payments abstraction, **remote task** events in feed, **GMI** compatibility (`max_completion_tokens`), timeouts for remote tasks.
+
+### You must do (cannot be automated from here)
+
+1. **Official hackathon form** — open the link from organizers (Discord / email / Devpost); we do not have your portal credentials.
+2. **Submit fields** — typically: **GitHub repo URL**, **live demo URLs** (core + dashboard), **2–3 sentence description**, **video link** if required, **team / rules checkbox**.
+3. **Shipables.dev** (if required by brief) — sign in with GitHub → **install a sponsor skill** → **publish this project as a skill** → paste the **Shipables / skill URL** into the submission.
+4. **Senso `cited.md`** (only if brief mandates *their* network) — follow [senso.ai/cited-md](https://senso.ai/cited-md) and [docs.senso.ai](https://docs.senso.ai/docs/hello-world); otherwise **`cited.md` + `/reports/latest`** already satisfy “publish output” for many judges.
+5. **Render secrets** — confirm non-placeholder: `TINYFISH_API_KEY`, `GMI_*` or Bedrock, `VAPI_*`, `AUTONOMY_SOURCES`, optional pay-rail URLs; **`REDIS_URL`** from Key Value only.
+6. **Vapi assistant** — first message / prompt so the call **reads the briefing**, not a generic greeting.
+7. **Optional screen recording** — 2–3 min: dashboard agents → Settings **Run now** → Events (`task.remote.completed`) → browser tab **`/reports/latest`** → mention sponsor row above.
+
+### If something breaks during the live demo
+
+Keep **`/health`**, **`/agents`**, and a **pre-captured** `/reports/latest` or Events tab open in another tab; narrate the **architecture** and **sponsor integrations** while you recover.
 
 ## Tests
 
@@ -184,13 +215,14 @@ If neither `AGENTMESH_TEST_REDIS_URL` nor a non-placeholder `REDIS_URL` is set, 
 
 ## Sponsor credits
 
-- **AWS** — Bedrock Claude for reasoning across research, CRM, and code-review agents.  
-- **WunderGraph** — Original prompt target for a unified API; this repo ships a GraphQL gateway with the same operations and live-style `meshState` polling.  
-- **Ghost / TigerData** — Durable event logging from the core router (best-effort, non-blocking).  
-- **Nexla** — Optional payload normalisation between agent schemas.  
-- **Redis** — Pub/sub backbone and registry/heartbeat storage.  
+- **GMI Cloud** — OpenAI-compatible inference when `GMI_API_*` is set (research + core local agents).  
+- **AWS** — Bedrock Claude as optional reasoning path.  
+- **WunderGraph** — Optional sponsor signals for autonomy (`fetchWundergraphSignals`).  
+- **Ghost / TigerData** — Optional content APIs via env template.  
+- **Nexla** — Optional payload transform in `transformer.ts`.  
+- **Redis / Render Key Value** — Pub/sub, registry, heartbeats (production: Valkey-compatible).  
 - **Akash** — Optional decentralised deployment (`infra/k8s/agentmesh.sdl.yml`).  
-- **Tinyfish** — Web research agent for live scraping before LLM synthesis.  
+- **Tinyfish** — Live web runs before LLM synthesis.  
 - **Chainguard** — Hardened Node images in Dockerfiles.  
-- **Vapi** — Voice surface (`packages/voice`) for phone and assistant workflows.  
-- **Insforge** — Reserved for future mesh extensions per environment template.
+- **Vapi** — Outbound calls from **core** (`/vapi/trigger-call`); separate `packages/voice` exists for full-stack compose.  
+- **Insforge** — Reserved in `.env.example` for extensions.
