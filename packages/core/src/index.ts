@@ -3,6 +3,9 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import { access, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { resolve } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   AgentRegistration,
@@ -26,6 +29,7 @@ import { startRouter } from './router.js';
 import { transformPayload } from './transformer.js';
 import { AutonomyController } from './autonomy.js';
 import { localAgentRegistry, runLocalTask } from './localAgents.js';
+import { getSponsorStatus } from './sponsors.js';
 
 const recentEvents: MeshEvent[] = [];
 const MAX_EVENTS = 50;
@@ -83,6 +87,8 @@ async function buildMeshState(): Promise<MeshState> {
 async function dispatchTask(req: TaskRequest): Promise<TaskResult> {
   const started = Date.now();
   const local = await runLocalTask(req, async (topic, event) => {
+    pushEvent(event);
+    broadcast({ type: 'event', data: event });
     try {
       await withTimeout(publish(topic, event), undefined, 1200);
     } catch {
@@ -163,9 +169,28 @@ export async function buildServer() {
   app.get('/autonomy/status', async () => {
     return autonomyController?.getStatus() ?? { enabled: false };
   });
+  app.get('/sponsors/status', async () => {
+    return getSponsorStatus();
+  });
   app.post('/autonomy/run-now', async () => {
     if (!autonomyController) return { enabled: false };
     return autonomyController.runNow();
+  });
+  app.get('/reports/latest', async () => {
+    const filePath = resolve(process.cwd(), 'cited.md');
+    let cited = '';
+    try {
+      await access(filePath, constants.F_OK);
+      cited = await readFile(filePath, 'utf-8');
+    } catch {
+      cited = '';
+    }
+    return {
+      generatedAt: new Date().toISOString(),
+      lastAutonomyStatus: autonomyController?.getStatus() ?? { enabled: false },
+      recentEvents: recentEvents.slice(0, 20),
+      citedMarkdown: cited,
+    };
   });
 
   app.post('/agents/register', async (request) => {
@@ -223,8 +248,52 @@ export async function buildServer() {
       timestamp: body.timestamp ? new Date(body.timestamp) : new Date(),
       ttl: body.ttl,
     };
-    await publish(event.topic, event);
+    pushEvent(event);
+    broadcast({ type: 'event', data: event });
+    try {
+      await withTimeout(publish(event.topic, event), undefined, 1200);
+    } catch {
+      /* non-fatal */
+    }
     return { ok: true };
+  });
+
+  app.post('/vapi/trigger-call', async (request, reply) => {
+    const key = process.env.VAPI_API_KEY;
+    const phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID;
+    const assistantId = process.env.VAPI_ASSISTANT_ID;
+    if (
+      !key ||
+      key.startsWith('PLACEHOLDER') ||
+      !phoneNumberId ||
+      !assistantId
+    ) {
+      return reply.code(503).send({ error: 'Vapi not configured' });
+    }
+    const { phoneNumber, message } = request.body as {
+      phoneNumber: string;
+      message?: string;
+    };
+    const res = await fetch('https://api.vapi.ai/call/phone', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        phoneNumberId,
+        assistantId,
+        customer: { number: phoneNumber },
+        assistantOverrides: message ? { firstMessage: message } : undefined,
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) return reply.code(502).send({ error: text });
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { raw: text };
+    }
   });
 
   app.post('/tasks/dispatch', async (request) => {

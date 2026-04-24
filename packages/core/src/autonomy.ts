@@ -3,6 +3,7 @@ import type { MeshEvent, TaskRequest, TaskResult } from './types.js';
 import { appendCitedRun } from './cited.js';
 import { executeMonetization } from './payments.js';
 import { searchAutonomyMemory, writeAutonomyMemory } from './agentMemory.js';
+import { fetchWundergraphSignals } from './sponsors.js';
 
 export interface AutonomyStatus {
   enabled: boolean;
@@ -116,8 +117,17 @@ export class AutonomyController {
         userId: memoryUserId,
         sessionId: memorySession,
       });
+      const wgSignals = await fetchWundergraphSignals(
+        gathered.map((x) => x.url),
+      );
       const query = [
         'Analyze these live web snippets and return actionable competitive intelligence.',
+        ...(wgSignals.length > 0
+          ? [
+              'Additional sponsor-sourced signals from WunderGraph:',
+              ...wgSignals.map((x) => `- ${x}`),
+            ]
+          : []),
         ...(memoryContext.length > 0
           ? [
               'Relevant memory context from previous cycles:',
@@ -169,6 +179,9 @@ export class AutonomyController {
       const actions: string[] = [
         `Dispatched competitor-intel task (${researchResult.status})`,
         `Dispatched deal-risk-analysis task (${crmResult.status})`,
+        ...(wgSignals.length > 0
+          ? [`Ingested ${wgSignals.length} WunderGraph sponsor signals`]
+          : []),
       ];
       for (const m of monetization) {
         actions.push(
@@ -205,6 +218,7 @@ export class AutonomyController {
         payload: {
           trigger,
           sources: gathered.map((x) => x.url),
+          wundergraphSignals: wgSignals,
           research: researchResult.output,
           crm: crmResult.output,
           monetization,
