@@ -9,7 +9,7 @@ services:
     plan: starter
     autoDeploy: true
     healthCheckPath: /health
-    buildCommand: npm ci && npm run build -w @agentmesh/core
+    buildCommand: npm ci --include=dev && npm run build -w @agentmesh/core
     startCommand: node packages/core/dist/main.js
     envVars:
       - key: NODE_ENV
